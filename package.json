@@ -1,0 +1,12 @@
+{
+  "name": "smart-expense-tracker",
+  "version": "1.0.0",
+  "description": "Local simulation of backend logic for Smart Expense Tracker",
+  "main": "backend/test/testRunner.js",
+  "scripts": {
+    "test": "node backend/test/testRunner.js"
+  },
+  "keywords": [],
+  "author": "Satiya",
+  "license": "MIT"
+}

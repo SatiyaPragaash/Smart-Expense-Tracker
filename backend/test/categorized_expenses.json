@@ -1,0 +1,37 @@
+[
+  {
+    "date": "2025-06-01",
+    "amount": 23.45,
+    "merchant": "Uber",
+    "description": "Uber ride to downtown",
+    "category": "Transport"
+  },
+  {
+    "date": "2025-06-02",
+    "amount": 105.99,
+    "merchant": "Walmart",
+    "description": "Groceries",
+    "category": "Groceries"
+  },
+  {
+    "date": "2025-06-03",
+    "amount": 85,
+    "merchant": "Spotify",
+    "description": "Music subscription",
+    "category": "Entertainment"
+  },
+  {
+    "date": "2025-06-04",
+    "amount": 45,
+    "merchant": "McDonalds",
+    "description": "Lunch",
+    "category": "Dining"
+  },
+  {
+    "date": "2025-06-05",
+    "amount": 75,
+    "merchant": "Hydro Toronto",
+    "description": "Utility bill",
+    "category": "Utilities"
+  }
+]
