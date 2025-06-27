@@ -4,7 +4,7 @@ import FileUpload from './components/FileUpload';
 function App() {
   return (
     <div style={{ padding: '2rem', fontFamily: 'Arial' }}>
-      <h1>Smart Expense Tracker</h1>
+      <h1></h1>
       <FileUpload />
     </div>
   );

@@ -1,12 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
-function checkBudgets() {
-  const expenses = JSON.parse(fs.readFileSync(path.join(__dirname, 'test', 'categorized_expenses.json')));
-  const budgets = JSON.parse(fs.readFileSync(path.join(__dirname, 'utils', 'budgetConfig.json')));
+function checkBudgets(budgetOverrides = null) {
+  const expenses = JSON.parse(
+    fs.readFileSync(path.join(__dirname, 'test', 'categorized_expenses.json'))
+  );
+  const budgets = budgetOverrides
+    || JSON.parse(fs.readFileSync(path.join(__dirname, 'utils', 'budgetConfig.json')));
 
   const totals = {};
-
   for (const tx of expenses) {
     if (!totals[tx.category]) totals[tx.category] = 0;
     totals[tx.category] += tx.amount;
@@ -25,6 +27,7 @@ function checkBudgets() {
       over
     });
   }
+
   return summary;
 }
 
