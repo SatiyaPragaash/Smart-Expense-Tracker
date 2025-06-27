@@ -12,15 +12,20 @@ function checkBudgets() {
     totals[tx.category] += tx.amount;
   }
 
-  console.log("📊 Budget Check Summary:");
+  const summary = [];
+
   for (const category in budgets) {
     const spent = totals[category] || 0;
     const limit = budgets[category];
-    console.log(`- ${category}: $${spent.toFixed(2)} spent (Limit: $${limit})`);
-    if (spent > limit) {
-      console.log(`🚨 ALERT: Budget exceeded in ${category} by $${(spent - limit).toFixed(2)}!`);
-    }
+    const over = spent > limit;
+    summary.push({
+      category,
+      spent: spent.toFixed(2),
+      limit,
+      over
+    });
   }
+  return summary;
 }
 
 module.exports = checkBudgets;

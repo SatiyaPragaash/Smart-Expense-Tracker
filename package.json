@@ -4,9 +4,15 @@
   "description": "Local simulation of backend logic for Smart Expense Tracker",
   "main": "backend/test/testRunner.js",
   "scripts": {
-    "test": "node backend/test/testRunner.js"
+    "test": "node backend/test/testRunner.js",
+    "dev:backend": "node backend/server.js"
   },
   "keywords": [],
   "author": "Satiya",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.0.1"
+  }
 }
