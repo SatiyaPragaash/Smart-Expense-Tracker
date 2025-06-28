@@ -13,19 +13,20 @@ function FileUpload() {
     Entertainment: 80,
     Utilities: 120,
   });
-  
+
   const [apiUrl, setApiUrl] = useState('');
 
   useEffect(() => {
     fetch('/config.json')
       .then(res => res.json())
       .then(config => {
-      setApiUrl(config.API_URL);
+        setApiUrl(config.API_URL);
       })
       .catch(() => {
-      setMessage('❌ Failed to load API config.');
+        setMessage('❌ Failed to load API config.');
       });
   }, []);
+
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setMessage('');
@@ -47,14 +48,21 @@ function FileUpload() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('budgets', JSON.stringify(budgets));
-
     try {
-        const response = await fetch(apiUrl, {
+      const fileText = await file.text(); // Read file content
+      const expenseData = JSON.parse(fileText); // Parse JSON
+
+      const payload = {
+        expenses: expenseData,
+        budgets: budgets
+      };
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -67,7 +75,7 @@ function FileUpload() {
       }
     } catch (err) {
       console.error(err);
-      setMessage('❌ Network or server error.');
+      setMessage('❌ Invalid file format or server error.');
       setSummary(null);
     }
   };
@@ -75,18 +83,18 @@ function FileUpload() {
   return (
     <div className="container animate-fade-in">
       <h1>💰 Smart Expense Tracker</h1>
-      
+
       <form onSubmit={handleSubmit}>
         <div className="budget-input-section">
           <h3>💳 Set Your Monthly Budgets</h3>
           {Object.entries(budgets).map(([cat, val]) => (
             <div key={cat} className="budget-item">
               <label className="budget-label">
-                {cat === 'Groceries' && '🛒'} 
-                {cat === 'Transport' && '🚗'} 
-                {cat === 'Dining' && '🍽️'} 
-                {cat === 'Entertainment' && '🎬'} 
-                {cat === 'Utilities' && '💡'} 
+                {cat === 'Groceries' && '🛒'}
+                {cat === 'Transport' && '🚗'}
+                {cat === 'Dining' && '🍽️'}
+                {cat === 'Entertainment' && '🎬'}
+                {cat === 'Utilities' && '💡'}
                 {cat}:
               </label>
               <input
@@ -102,9 +110,9 @@ function FileUpload() {
         </div>
 
         <div className="upload-section">
-          <input 
-            type="file" 
-            accept=".json" 
+          <input
+            type="file"
+            accept=".json"
             onChange={handleFileChange}
             style={{ flex: 1 }}
           />
@@ -125,11 +133,11 @@ function FileUpload() {
             {summary.map((item, idx) => (
               <li key={idx} className={item.over ? 'over' : ''}>
                 <span className="category-name">
-                  {item.category === 'Groceries' && '🛒'} 
-                  {item.category === 'Transport' && '🚗'} 
-                  {item.category === 'Dining' && '🍽️'} 
-                  {item.category === 'Entertainment' && '🎬'} 
-                  {item.category === 'Utilities' && '💡'} 
+                  {item.category === 'Groceries' && '🛒'}
+                  {item.category === 'Transport' && '🚗'}
+                  {item.category === 'Dining' && '🍽️'}
+                  {item.category === 'Entertainment' && '🎬'}
+                  {item.category === 'Utilities' && '💡'}
                   {item.category}
                 </span>
                 <span className="budget-amount">${item.spent} / ${item.limit}</span>

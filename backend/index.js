@@ -9,7 +9,7 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body);
 
-    const transactions = body.transactions;
+    const transactions = body.expenses;
     const budgets = body.budgets;
 
     if (!transactions || !Array.isArray(transactions)) {
