@@ -6,23 +6,49 @@ resource "random_id" "suffix" {
   byte_length = 4
 }
 
-# -------------------- S3 BUCKET --------------------
+# -------------------- S3 Buckets --------------------
 resource "aws_s3_bucket" "uploads" {
-  bucket = "smart-expense-tracker-uploads-${random_id.suffix.hex}"
-
-  tags = {
-    Name = "Expense Uploads"
-    Environment = "Dev"
-  }
-
-  lifecycle {
-    prevent_destroy = false
-  }
-
+  bucket        = "smart-expense-tracker-uploads-${random_id.suffix.hex}"
   force_destroy = true
+  tags = { Name = "Expense Uploads", Environment = "Dev" }
 }
 
-# -------------------- DYNAMODB TABLE --------------------
+resource "aws_s3_bucket" "frontend" {
+  bucket        = "smart-expense-tracker-frontend-${random_id.suffix.hex}"
+  force_destroy = true
+  tags = { Name = "Frontend Hosting", Environment = "Dev" }
+}
+
+resource "aws_s3_bucket_website_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+  index_document { suffix = "index.html" }
+  error_document { key = "index.html" }
+}
+
+resource "aws_s3_bucket_public_access_block" "frontend_block" {
+  bucket                  = aws_s3_bucket.frontend.id
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "frontend_public_policy" {
+  bucket = aws_s3_bucket.frontend.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Sid       = "PublicReadGetObject",
+      Effect    = "Allow",
+      Principal = "*",
+      Action    = ["s3:GetObject"],
+      Resource  = "${aws_s3_bucket.frontend.arn}/*"
+    }]
+  })
+  depends_on = [aws_s3_bucket_public_access_block.frontend_block]
+}
+
+# -------------------- DynamoDB --------------------
 resource "aws_dynamodb_table" "transactions" {
   name         = "TransactionsTable"
   billing_mode = "PAY_PER_REQUEST"
@@ -39,17 +65,15 @@ resource "aws_dynamodb_table" "transactions" {
   }
 }
 
-# -------------------- IAM ROLE --------------------
+# -------------------- Lambda Role & Function --------------------
 resource "aws_iam_role" "lambda_exec_role" {
   name = "lambda_execution_role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Action = "sts:AssumeRole",
-      Effect = "Allow",
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
+      Action    = "sts:AssumeRole",
+      Effect    = "Allow",
+      Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
 }
@@ -62,19 +86,13 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Statement = [
       {
         Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"
         ],
         Effect = "Allow",
         Resource = "*"
       },
       {
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
+        Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
         Effect = "Allow",
         Resource = [
           aws_s3_bucket.uploads.arn,
@@ -82,9 +100,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
         ]
       },
       {
-        Action = [
-          "dynamodb:PutItem"
-        ],
+        Action = ["dynamodb:PutItem"],
         Effect = "Allow",
         Resource = aws_dynamodb_table.transactions.arn
       }
@@ -92,7 +108,6 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-# -------------------- LAMBDA FUNCTION --------------------
 resource "aws_lambda_function" "upload_expense_lambda" {
   function_name    = "uploadExpenseHandler"
   role             = aws_iam_role.lambda_exec_role.arn
@@ -104,16 +119,22 @@ resource "aws_lambda_function" "upload_expense_lambda" {
 
   environment {
     variables = {
-      S3_BUCKET     = aws_s3_bucket.uploads.bucket
-      DYNAMO_TABLE  = aws_dynamodb_table.transactions.name
+      S3_BUCKET    = aws_s3_bucket.uploads.bucket
+      DYNAMO_TABLE = aws_dynamodb_table.transactions.name
     }
   }
 }
 
-# -------------------- API GATEWAY --------------------
+# -------------------- API Gateway --------------------
 resource "aws_apigatewayv2_api" "api" {
   name          = "expense-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["*"]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda_integration" {
@@ -144,12 +165,40 @@ resource "aws_lambda_permission" "apigw_lambda" {
   source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
 }
 
-# -------------------- OUTPUTS --------------------
+# -------------------- Generate config.json --------------------
+resource "local_file" "frontend_config" {
+  filename = "${path.module}/frontend-config.json"
+  content  = jsonencode({
+    API_URL = "${aws_apigatewayv2_api.api.api_endpoint}/prod/upload"
+  })
+}
+
+# -------------------- Unzip & Upload frontend.zip --------------------
+resource "null_resource" "upload_frontend_assets" {
+  depends_on = [local_file.frontend_config]
+
+  provisioner "local-exec" {
+    command = <<EOT
+      rm -rf tmp_frontend
+      mkdir -p tmp_frontend
+      unzip -q frontend.zip -d tmp_frontend
+      cp "${path.module}/frontend-config.json" tmp_frontend/config.json
+      aws s3 sync tmp_frontend s3://${aws_s3_bucket.frontend.bucket} --delete
+      rm -rf tmp_frontend
+    EOT
+  }
+}
+
+# -------------------- Outputs --------------------
 output "api_endpoint" {
   value = "${aws_apigatewayv2_api.api.api_endpoint}/upload"
 }
 
-output "s3_bucket_name" {
+output "s3_frontend_url" {
+  value = "http://${aws_s3_bucket.frontend.bucket}.s3-website.us-east-1.amazonaws.com"
+}
+
+output "s3_bucket_name_uploads" {
   value = aws_s3_bucket.uploads.bucket
 }
 

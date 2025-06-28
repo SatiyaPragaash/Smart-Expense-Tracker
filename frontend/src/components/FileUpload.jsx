@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../App.css';
 
 function FileUpload() {
@@ -13,7 +13,19 @@ function FileUpload() {
     Entertainment: 80,
     Utilities: 120,
   });
+  
+  const [apiUrl, setApiUrl] = useState('');
 
+  useEffect(() => {
+    fetch('/config.json')
+      .then(res => res.json())
+      .then(config => {
+      setApiUrl(config.API_URL);
+      })
+      .catch(() => {
+      setMessage('❌ Failed to load API config.');
+      });
+  }, []);
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setMessage('');
@@ -40,7 +52,7 @@ function FileUpload() {
     formData.append('budgets', JSON.stringify(budgets));
 
     try {
-      const response = await fetch('http://localhost:3001/upload', {
+        const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
       });
