@@ -65,6 +65,17 @@ resource "aws_dynamodb_table" "transactions" {
   }
 }
 
+# -------------------- SNS Topic --------------------
+resource "aws_sns_topic" "budget_alerts" {
+  name = "budget-overage-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email_sub" {
+  topic_arn = aws_sns_topic.budget_alerts.arn
+  protocol  = "email"
+  endpoint  = "satiya.prm@gmail.com"
+}
+
 # -------------------- Lambda Role & Function --------------------
 resource "aws_iam_role" "lambda_exec_role" {
   name = "lambda_execution_role"
@@ -85,9 +96,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Action = [
-          "logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"
-        ],
+        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
         Effect = "Allow",
         Resource = "*"
       },
@@ -103,6 +112,11 @@ resource "aws_iam_role_policy" "lambda_policy" {
         Action = ["dynamodb:PutItem"],
         Effect = "Allow",
         Resource = aws_dynamodb_table.transactions.arn
+      },
+      {
+        Action = ["sns:Publish"],
+        Effect = "Allow",
+        Resource = aws_sns_topic.budget_alerts.arn
       }
     ]
   })
@@ -119,8 +133,10 @@ resource "aws_lambda_function" "upload_expense_lambda" {
 
   environment {
     variables = {
-      S3_BUCKET    = aws_s3_bucket.uploads.bucket
-      DYNAMO_TABLE = aws_dynamodb_table.transactions.name
+      S3_BUCKET     = aws_s3_bucket.uploads.bucket
+      DYNAMO_TABLE  = aws_dynamodb_table.transactions.name
+      ALERT_TOPIC   = aws_sns_topic.budget_alerts.arn
+      REPORT_BUCKET = aws_s3_bucket.uploads.bucket
     }
   }
 }
@@ -165,6 +181,79 @@ resource "aws_lambda_permission" "apigw_lambda" {
   source_arn    = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
 }
 
+# -------------------- CloudFront + WAF --------------------
+resource "aws_wafv2_web_acl" "frontend_acl" {
+  name        = "frontend-acl"
+  description = "WAF for Smart Expense Frontend"
+  scope       = "CLOUDFRONT"
+  default_action {
+    allow {}
+  }
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "frontendACL"
+    sampled_requests_enabled   = true
+  }
+  rule {
+    name     = "AWS-AWSManagedRulesCommonRuleSet"
+    priority = 1
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "commonRule"
+    }
+  }
+}
+
+resource "aws_cloudfront_distribution" "frontend_cdn" {
+  enabled             = true
+  default_root_object = "index.html"
+
+  origin {
+    domain_name = aws_s3_bucket.frontend.bucket_regional_domain_name
+    origin_id   = "s3-frontend-origin"
+    s3_origin_config {
+      origin_access_identity = ""
+    }
+  }
+
+  default_cache_behavior {
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "s3-frontend-origin"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  web_acl_id = aws_wafv2_web_acl.frontend_acl.arn
+}
+
 # -------------------- Generate config.json --------------------
 resource "local_file" "frontend_config" {
   filename = "${path.module}/frontend-config.json"
@@ -196,6 +285,10 @@ output "api_endpoint" {
 
 output "s3_frontend_url" {
   value = "http://${aws_s3_bucket.frontend.bucket}.s3-website.us-east-1.amazonaws.com"
+}
+
+output "cloudfront_url" {
+  value = "https://${aws_cloudfront_distribution.frontend_cdn.domain_name}"
 }
 
 output "s3_bucket_name_uploads" {
